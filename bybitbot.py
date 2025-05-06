@@ -3,7 +3,17 @@ import requests
 import pandas as pd
 from pybit.unified_trading import HTTP
 from datetime import datetime
+from flask import Flask
 
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bot Running"
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+    
 # Configuração Telegram
 BOT_TOKEN = '7723343194:AAEpgCrA6mymE5VeSv2DDdQ6sAVvVMJvCYc'
 CHAT_ID = '948274284'
