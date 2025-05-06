@@ -1,18 +1,19 @@
 import time
 import requests
 import pandas as pd
-from binance.client import Client
+from pybit.unified_trading import HTTP
 from datetime import datetime
 
 # Configuração Telegram
 BOT_TOKEN = '7723343194:AAEpgCrA6mymE5VeSv2DDdQ6sAVvVMJvCYc'
 CHAT_ID = '948274284'
 
-client = Client()
+# Cliente público da Bybit (sem chave)
+client = HTTP(testnet=False)
 
 # Estado da operação
 operacao_ativa = False
-tipo_operacao = None  # 'long' ou 'short'
+tipo_operacao = None
 preco_entrada = 0.0
 preco_alvo = 0.0
 preco_stop = 0.0
@@ -29,39 +30,36 @@ taxa_venda = 0.0004
 lucro_desejado = 0.005 + taxa_compra + taxa_venda
 perda_maxima = 0.005
 
-
 def enviar_mensagem(msg):
     url = f'https://api.telegram.org/bot{BOT_TOKEN}/sendMessage'
     data = {'chat_id': CHAT_ID, 'text': msg}
     requests.post(url, data=data)
 
-
 def pegar_dados():
-    candles = client.get_klines(symbol="DOGEUSDT", interval=Client.KLINE_INTERVAL_5MINUTE, limit=50)
-    df = pd.DataFrame(candles, columns=[
-        'timestamp', 'open', 'high', 'low', 'close', 'volume',
-        'close_time', 'quote_asset_volume', 'number_of_trades',
-        'taker_buy_base_volume', 'taker_buy_quote_volume', 'ignore'
+    response = client.get_kline(
+        category="linear",
+        symbol="SOLUSDT",
+        interval="5",
+        limit=50
+    )
+    df = pd.DataFrame(response["result"]["list"], columns=[
+        'timestamp', 'open', 'high', 'low', 'close', 'volume', 'turnover'
     ])
     df['close'] = df['close'].astype(float)
+    df = df[::-1].reset_index(drop=True)
     return df
-
 
 def analisar(df):
     df['EMA9'] = df['close'].ewm(span=9).mean()
     df['EMA21'] = df['close'].ewm(span=21).mean()
-
     delta = df['close'].diff()
     up = delta.clip(lower=0)
     down = -delta.clip(upper=0)
     rs = up.rolling(6).mean() / down.rolling(6).mean()
     df['RSI6'] = 100 - (100 / (1 + rs))
-
     df['MACD'] = df['close'].ewm(span=12).mean() - df['close'].ewm(span=26).mean()
     df['Signal'] = df['MACD'].ewm(span=9).mean()
-
     return df
-
 
 def verificar_comandos():
     global ultima_resposta_status, ultima_resposta_statusdia
@@ -89,11 +87,9 @@ def verificar_comandos():
         ultima_resposta_statusdia = data_msg
         enviar_mensagem(f"🗓️ Relatório do dia:\nTotal: {operacoes_realizadas} operações\nLucro acumulado: {lucro_total:.2f}%\nDetalhes:\n" + "\n".join(relatorio_operacoes[-10:]))
 
-
 def preco_atual():
     df = pegar_dados()
     return df['close'].iloc[-1]
-
 
 def checar_saida(preco):
     global operacao_ativa, tipo_operacao, preco_entrada, preco_alvo, preco_stop
@@ -126,7 +122,6 @@ def checar_saida(preco):
     lucro_total += lucro
     relatorio_operacoes.append(f"{tipo_operacao.upper()} | Lucro: {lucro:.2f}%")
 
-
 def executar_operacao(df):
     global operacao_ativa, tipo_operacao, preco_entrada, preco_alvo, preco_stop
 
@@ -158,7 +153,6 @@ def executar_operacao(df):
         preco_stop = preco * (1 + perda_maxima)
         operacao_ativa = True
         enviar_mensagem(f"📉 VENDA - Entrada (SHORT): {preco:.2f}\n🌟 Alvo: {preco_alvo:.2f}\n🚩 Stop: {preco_stop:.2f}")
-
 
 # Loop principal
 while True:
