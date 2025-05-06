@@ -1,3 +1,4 @@
 pandas
 requests
 pybit
+Flask==2.1.0  # ou a versão mais recente
